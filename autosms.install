@@ -1,0 +1,92 @@
+<?php
+
+/**
+ * Implements hook_schema().
+ */
+function autosms_schema() {
+  $schema['autosms_newsinglenodes'] = array(
+    'description' => t('New Node IDs'),
+    'fields' => array(
+      'nid' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => t('Node ID'),
+      ),
+      'operation' => array(
+        'description' => 'Type of operation',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+    ),
+    'indexes' => array(
+      'operation' => array('operation'),
+    ),
+  );
+  $schema['autosms_newnodes'] = array(
+    'description' => t('New Grouped Node IDs'),
+    'fields' => array(
+      'nids' => array(
+        'type' => 'varchar',
+        'not null' => TRUE,
+        'length' => 255,
+        'description' => t('Node ID'),
+        'default' => '',
+      ),
+      'operation' => array(
+        'description' => 'Type of operation',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+    ),
+    'indexes' => array(
+      'operation' => array('operation'),
+    ),
+  );
+  $schema['autosms_tempsend'] = array(
+    'description' => t('The temp table for a sms'),
+    'fields' => array(
+      'mid' => array(
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'size' => 'small',
+        'not null' => TRUE,
+        'description' => t('For ID.'),
+      ),
+      'number' => array(
+        'description' => t('Number'),
+        'type' => 'varchar',
+        'length' => 13,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'sign' => array(
+        'description' => t('Signature'),
+        'type' => 'varchar',
+        'length' => 13,
+        'not null' => TRUE,
+        'default' => 'ukrcity',
+      ),
+      'message' => array(
+        'description' => t('Message'),
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'send_time' => array(
+        'mysql_type' => 'DATETIME',
+        'not null' => TRUE,
+        'description' => t('When send'),
+      ),
+    ),
+    'unique keys' => array(
+      'mid' => array('mid'),
+    ),
+  );
+  return $schema;
+}

@@ -1,0 +1,8 @@
+name = AutoSMS
+description = "Auto sending SMS by Cron"
+package = ITassist Studio Development
+core = 7.x
+files[] = autosms.module
+files[] = autosms.install
+files[] = autosms.admin.inc
+configure = admin/config/content/autosms/settings

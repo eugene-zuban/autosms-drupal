@@ -1,0 +1,367 @@
+<?php
+/**
+ * @file
+ * Send sms to the specific users.
+ *
+ * Notify users with SMS sending by cron
+ * Use turbosms.ua SMS Gateway to send SMS.
+ */
+
+/**
+ * Implements hook_permission()
+ */
+function autosms_permission() {
+  return array(
+    'autosms perm' => array(
+      'title' => t('Работа с Auto SMS'),
+      'description' => t('Просмотр и изменение настроек Auto SMS'),
+    ),
+  );
+}
+
+/**
+ * Implements hook_menu().
+ */
+function autosms_menu() {
+  $items['admin/config/autosms'] = array(
+    'title' => 'Auto SMS',
+    'description' => 'Настройки Auto SMS.',
+    'position' => 'right',
+    'weight' => -5,
+    'page callback' => 'system_admin_menu_block_page',
+    'access arguments' => array('administer site configuration'),
+    'file' => 'system.admin.inc',
+    'file path' => drupal_get_path('module', 'system'),
+  );
+
+  $items['admin/config/autosms/settings'] = array(
+    'title' => 'Auto SMS Настройки',
+    'description' => 'Изменить настройки Auto SMS.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('autosms_admin_settings'),
+    'access arguments' => array('autosms perm'),
+    'type' => MENU_NORMAL_ITEM,
+    'file' => 'autosms.admin.inc',
+  );
+
+  $items['admin/config/autosms/statistic'] = array(
+    'title' => 'Статистика SMS сообщений',
+    'description' => 'Статистика SMS сообщений',
+    'page callback' => 'autosms_stat',
+    'access callback' => TRUE,
+    'type' => MENU_NORMAL_ITEM,
+  );
+
+  return $items;
+}
+
+/**
+ * Hook_cron()
+ */
+function autosms_cron() {
+  $last_send = variable_get('autosms_last_send', 1);
+  $cron_time = variable_get('autosms_cron_time', '00:00');
+  list($hour_st, $min_st) = explode(':', $cron_time);
+  $need_send = strtotime('today') + $hour_st * 60 * 60;
+
+  if ($need_send <= time()) {
+    $sh_day = variable_get('autosms_shedule_count', array('1')) * 24 * 60 * 60;
+    $time_window = time() + $sh_day;
+
+    if ($last_send + $sh_day < time()) {
+      watchdog('autosms', 'Запуск рассылки SMS');
+      if (autosms_send()) {
+        variable_set('autosms_last_send', time());
+        watchdog('autosms', 'Рассылка выполнена успешно');
+      }
+    }
+    else {
+      watchdog('autosms', 'Рассылка не запущена, так как еще не достигнуто временное окно для рассылки. Последний раз рассылка была запущена %last.
+      Рассылка настроена на запуск один раз в %count день(дня) в %time часов', array(
+        '%last' => date("Y-m-d H:i", $last_send),
+        '%count' => variable_get('autosms_shedule_count', array('1')),
+        '%time' => $cron_time
+      ));
+    }
+  }
+  else {
+    watchdog('autosms', 'Рассылка не запущена. Не достигнуто время запуска');
+    watchdog('autosms', 'Запуск процедуры проверки рассылки %need', array('%need' => date("Y-m-d H:i", $need_send)));
+  }
+}
+
+/**
+ * Main function
+ */
+function autosms_send() {
+  /* Чистим таблицы */
+  $clean_result = db_delete('autosms_newsinglenodes')->execute();
+  $clean_result = db_delete('autosms_newnodes')->execute();
+  $clean_result = db_delete('autosms_tempsend')->execute();
+
+  /* поиск новых нод, созданных за прошедшие сутки от времени, выставленного в настройках модуля*/
+  $day_interval = 24 * 60 * 60 * variable_get('autosms_shedule_count', array('1'));
+  $end_time = strtotime('today');
+  $start_time = $end_time - $day_interval;
+
+  /* Вызов функции поискка новых нод, которые созданы в текущем временном окне */
+  $node_array = autosms_nodesearch('nedvigimost', $start_time, $end_time);
+  $types_str = array();
+
+
+  $break = 1;
+  foreach ($node_array as $row) {
+    $break = 0;
+    $types_op = autosms_optypes($row->nid);
+    if ($types_op) {
+      foreach ($types_op as $type) {
+        $types_str[] = $type->field_tags_tid;
+      }
+      $string = join(',', $types_str);
+      unset($types_str);
+      $nids = db_insert('autosms_newsinglenodes')->fields(array(
+        'nid' => $row->nid,
+        'operation' => $string,
+      ))->execute();
+
+      $string = '';
+    }
+  }
+
+  if ($break) {
+    return 'Нет объектов недвижимости';
+  }
+
+
+  /**
+   * Заполняем таблицу autosms_newnodes сгруппированными идентификаторами нод по типу операции
+   */
+  $query = db_select('autosms_newsinglenodes', 'newsingle');
+  $query
+    ->fields('newsingle', array('nid', 'operation'))
+    ->groupBy('newsingle.operation');
+  $result = $query->execute();
+
+  $oper_str = array();
+
+  $break = 1;
+  foreach ($result as $row) {
+    $break = 0;
+    //push nodes id in the string
+    $str_query = db_select('autosms_newsinglenodes', 'newsingle');
+    $str_query
+      ->fields('newsingle', array('nid'))
+      ->condition('operation', $row->operation);
+    $str_result = $str_query->execute();
+
+    if (!$str_result) {
+      return FALSE;
+    }
+    foreach ($str_result as $str_row) {
+      $nids_str[] = $str_row->nid;
+    }
+
+    $string = join(',', $nids_str);
+    unset($nids_str);
+    $nids = db_insert('autosms_newnodes')->fields(array(
+      'nids' => $string,
+      'operation' => $row->operation,
+    ))->execute();
+    $string = '';
+  }
+  if ($break) {
+    return FALSE;
+  }
+
+  /**
+   * Вызываем функию для работы с пользователями - получателями SMS
+  */
+  $output = '';
+  if (autosms_users()) {
+    /* Вызываем функцию для отправки SMS*/
+    autosms_sendmes();
+  };
+
+  return TRUE;
+}
+
+/**
+ * Функция поиска новых нод, созданных в определенный промежуток времени
+ */
+function autosms_nodesearch($nodetype, $starttime, $endtime) {
+  $result = db_query('SELECT nid FROM {node} WHERE type = :type AND created BETWEEN :min_val AND :max_val',
+    array(
+      ':type' => $nodetype,
+      ':min_val' => $starttime,
+      ':max_val' => $endtime,
+    )
+  );
+
+  return $result;
+}
+
+/**
+ * Функция для определения типа операции определенной ноды
+ */
+function autosms_optypes($nid) {
+  $result = db_query('SELECT field_tags_tid FROM {field_data_field_tags} WHERE entity_id = :entity_id',
+    array(
+      ':entity_id' => $nid,
+    )
+  );
+  return $result;
+}
+
+/**
+ * Функция для работы и обхода пользователей
+ */
+function autosms_users() {
+  /* Обходим всех юзеров и выбираем тех, у кого установлено значение получать рассылку*/
+  $result = db_query('SELECT entity_id FROM {field_data_field__sms} WHERE field__sms_value = :sms_val AND deleted = :del_st',
+    array(
+      ':sms_val' => 1,
+      ':del_st' => 0,
+    )
+  );
+
+  /* Находим что нужно этим пользователям и если есть среди новых объектов то, что им нужно, тогда записываем данные этого пользователя
+     в таблицу для формирования SMS */
+  $break = 1;
+  foreach ($result as $row) {
+    $break = 0;
+    /* Определяем что нужно клиенту */
+    $client_result = db_query('SELECT field_type_sms_tid FROM {field_data_field_type_sms} WHERE entity_id = :entity_id',
+      array(
+        ':entity_id' => $row->entity_id,
+      )
+    );
+
+    /* Формируем строку с тем, что нужно клиенту */
+    foreach ($client_result as $client_row) {
+      $client_str[] = $client_row->field_type_sms_tid;
+    }
+    $string = join(',', $client_str);
+    unset($client_str);
+    //dpm('Клиенту ' . $row->entity_id . ' нужно ' . $string);
+
+    /* Находим ноды, которые подходят под те операции, которые нужны клиентам */
+    $nodes_to_send = db_query('SELECT nids FROM {autosms_newnodes} WHERE operation = :operation',
+      array(
+        ':operation' => $string,
+      )
+    );
+
+
+    /* Пишем значения в таблицу для отправки SMS*/
+    foreach ($nodes_to_send as $row_mes) {
+      /* Берем номер этого клиента */
+      $client_number = db_query("SELECT field_client_phone_value FROM {field_data_field_client_phone} WHERE entity_id = :entity_id",
+        array(
+          ':entity_id' => $row->entity_id,
+        )
+      )->fetchField();
+
+      $sign = variable_get('autosms_sender_name', 'ukrcity');
+      if ($client_number) {
+        $messages = db_insert('autosms_tempsend')->fields(array(
+          'number' => $client_number,
+          'sign' => $sign,
+          'message' => $row_mes->nids,
+          'send_time' => date('Y-m-d H:i', time() + 300),
+        ))->execute();
+      }
+    }
+    $string = '';
+
+  }
+  if ($break) {
+    return FALSE;
+  }
+
+  return TRUE;
+}
+
+/**
+ * Функция отправки SMS на шлюз
+ */
+function autosms_sendmes() {
+  /* Проверяем есть ли новые SMS */
+  $query_messages = db_query('SELECT * FROM {autosms_tempsend}');
+  $db_host = variable_get('autosms_gw_server', '');
+  $db_user = variable_get('autosms_gw_login', '');
+  $db_pass = variable_get('autosms_gw_pass', '');
+  $db_table = variable_get('autosms_gw_db_table', '');
+  $db_db = variable_get('autosms_gw_db', '');
+  $db_server = mysql_connect($db_host, $db_user, $db_pass);
+
+  $sender_name = variable_get('autosms_sender_name', 'Ukrcity');
+  if (!$db_server) {
+    return FALSE;
+  }
+  mysql_select_db($db_db);
+  mysql_query("set names 'utf8'");
+  foreach ($query_messages as $row) {
+    $number = $row->number;
+    $message = $row->message;
+    $send_time = date("Y-m-d H:i", strtotime($row->send_time));
+    $query = "INSERT INTO " . $db_table . " (number,sign,message,send_time) VALUES('" . $number . "','" . $sender_name . "','Kod: " . $message . "','" . $send_time . "')";
+    $result = mysql_query($query);
+
+    if (!$result) {
+      die ("Database access failed: " . mysql_error());
+    }
+  }
+
+  mysql_close($db_server);
+}
+
+/**
+ * SMS statistics
+ */
+function autosms_stat() {
+  $db_host = variable_get('autosms_gw_server', '');
+  $db_user = variable_get('autosms_gw_login', '');
+  $db_pass = variable_get('autosms_gw_pass', '');
+  $db_table = variable_get('autosms_gw_db_table', '');
+  $db_db = variable_get('autosms_gw_db', '');
+
+  $db_server = mysql_connect($db_host, $db_user, $db_pass);
+  if (!$db_server) {
+    return FALSE;
+  }
+
+  mysql_select_db($db_db);
+  mysql_query("set names 'utf8'");
+
+  $query = "SELECT * FROM ukrcity ORDER BY id DESC";
+  $result = mysql_query($query);
+  $rows = mysql_num_rows($result);
+  $output = '<table>
+  <tr>
+    <th>ID записи</th>
+    <th>ID сообщения</th>
+    <th>Номер получателя</th>
+    <th>Подпись отправителя</th>
+    <th>Текст сообщения</th>
+    <th>WAP</th>
+    <th>Стоимость сообщения</th>
+    <th>Остаток кредитов</th>
+    <th>Запланированное ввремя отправки</th>
+    <th>Время фактической отправки</th>
+    <th>Обновление данных сообщения</th>
+    <th>Результат отправки</th>
+    <th>Статус</th>
+  </tr>';
+
+  for ($j = 0; $j < $rows; ++$j) {
+    $output .= '<tr>';
+    $row = mysql_fetch_row($result);
+    foreach ($row as $data) {
+      $output .= '<td>' . $data . '</td>';
+    }
+    $output .= '</tr>';
+  }
+  $output .= '</table>';
+  mysql_close($db_server);
+  return $output;
+}
