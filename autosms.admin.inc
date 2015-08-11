@@ -27,84 +27,84 @@ function autosms_admin_settings() {
     '#title' => t('SMS sending time'),
     '#options' => $options,
     '#default_value' => variable_get('autosms_cron_time', '00:00'),
-    '#description' => t('Укажите время, по достижению которого будет запущен планировщик и выполнена рассылка SMS сообщений.'),
+    '#description' => t('Select time when SMS wil be sending.'),
   );
 
   $options_sh = array(
-    '1' => t('Каждый день'),
-    '2' => t('Через день'),
-    '3' => t('Каждые 3 дня'),
+    '1' => t('Every day'),
+    '2' => t('Every other day'),
+    '3' => t('Every 3 days'),
   );
 
   $form['autosms_shedule_count'] = array(
     '#type' => 'select',
-    '#title' => t('Периодичность отправки SMS'),
+    '#title' => t('Frequency of sending a SMS'),
     '#options' => $options_sh,
     '#default_value' => variable_get('autosms_shedule_count', array('1')),
-    '#description' => t('Укажите как часто необходимо отправлять SMS'),
+    '#description' => t('Specify how often do you want to send a SMS'),
   );
 
   $form['autosms_sender_name'] = array(
-    '#title' => t('Имя отправителя'),
+    '#title' => t('Senders name'),
     '#type' => 'textfield',
-    '#description' => t('Введите имя отправителя сообщений, которое утверждено сервисом шлюза SMS'),
-    '#default_value' => variable_get('autosms_sender_name', 'Ukrcity'),
+    '#description' => t('The senders name, that approved by the SMS Gateway'),
+    '#default_value' => variable_get('autosms_sender_name', ''),
     '#size' => 20,
     '#weight' => -10,
   );
 
   $form['autosms_gw_server'] = array(
-    '#title' => t('Адрес SMS шлюза'),
+    '#title' => t('SMS GW Address'),
     '#type' => 'textfield',
-    '#description' => t('Введите адрес MySQL сервера'),
+    '#description' => t('MySQL address'),
     '#default_value' => variable_get('autosms_gw_server', ''),
     '#size' => 30,
     '#weight' => 10,
   );
 
   $form['autosms_gw_db'] = array(
-    '#title' => t('База данных'),
+    '#title' => t('Data Base'),
     '#type' => 'textfield',
-    '#description' => t('Введите имя базы данных шлюза'),
+    '#description' => t('Gateways Data Base'),
     '#default_value' => variable_get('autosms_gw_db', ''),
     '#size' => 30,
     '#weight' => 11,
   );
 
   $form['autosms_gw_db_table'] = array(
-    '#title' => t('Таблица данных'),
+    '#title' => t('DB Table'),
     '#type' => 'textfield',
-    '#description' => t('Введите имя таблицы в базе данных шлюза'),
+    '#description' => t('SMS Gateway DB Table'),
     '#default_value' => variable_get('autosms_gw_db_table', ''),
     '#size' => 30,
     '#weight' => 12,
   );
 
   $form['autosms_gw_login'] = array(
-    '#title' => t('Логин для подключения'),
+    '#title' => t('DB Username'),
     '#type' => 'textfield',
-    '#description' => t('Введите логин для подключения к БД'),
+    '#description' => t('DB Username for SMS GW'),
     '#default_value' => variable_get('autosms_gw_login', ''),
     '#size' => 30,
     '#weight' => 13,
   );
 
   $form['autosms_gw_pass'] = array(
-    '#title' => t('Пароль для подключения'),
+    '#title' => t('DB Password'),
     '#type' => 'textfield',
-    '#description' => t('Введите пароль для подключения к БД'),
+    '#description' => t('DB Password for SMS GW'),
     '#default_value' => variable_get('autosms_gw_pass', ''),
     '#size' => 30,
     '#weight' => 14,
   );
 
   $options = array(
-    'testing' => t('Тестовый режим'),
+    'testing' => t('Testing mode'),
   );
   $form['autosms_test_mode'] = array(
-    '#title' => t('Режим тестирования'),
+    '#title' => t('Testing mode'),
     '#type' => 'checkboxes',
-    '#description' => (t('Отметьте данное поле, если необходимо протестировать работу модуля (игнорируется поле время).')),
+    '#description' => t('Check for enabling the testing mode (the time field will be ignored).'),
     '#options' => $options,
     '#default_value' => variable_get('autosms_test_mode', ''),
     '#weight' => 25,
@@ -129,6 +129,6 @@ function autosms_admin_settings_submit($form, $form_state) {
  */
 function autosms_admin_settings_validate($form, &$form_state) {
   if ($form_state['values']['autosms_sender_name'] == '') {
-    form_set_error('autosms_sender_name', t('Введите корректное имя отправителя'));
+    form_set_error('autosms_sender_name', t('Sender cant be empty.'));
   }
 }

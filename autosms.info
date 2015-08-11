@@ -1,5 +1,5 @@
 name = AutoSMS
-description = "Auto sending SMS by Cron"
+description = "Auto sending SMS by Cron with Turbo SMS Gateway"
 package = ITassist Studio Development
 core = 7.x
 files[] = autosms.module
