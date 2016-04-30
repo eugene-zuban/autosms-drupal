@@ -1,10 +1,11 @@
 <?php
+
 /**
  * @file
- * Send sms to the specific users.
+ * Send sms to specific users.
  *
  * Notify users with SMS sending by cron
- * Use turbosms.ua SMS Gateway to send SMS.
+ * Using turbosms.ua SMS Gateway to send SMS.
  */
 
 /**
@@ -14,7 +15,7 @@ function autosms_permission() {
   return array(
     'autosms perm' => array(
       'title' => t('Config the Auto SMS'),
-      'description' => t('View & configure the Auto SMS settings'),
+      'description' => t('View & configure Auto SMS settings'),
     ),
   );
 }
@@ -25,7 +26,7 @@ function autosms_permission() {
 function autosms_menu() {
   $items['admin/config/autosms'] = array(
     'title' => 'Auto SMS',
-    'description' => 'Настройки Auto SMS.',
+    'description' => 'Setup Auto SMS Settings.',
     'position' => 'right',
     'weight' => -5,
     'page callback' => 'system_admin_menu_block_page',
@@ -36,7 +37,7 @@ function autosms_menu() {
 
   $items['admin/config/autosms/settings'] = array(
     'title' => 'Auto SMS Setups',
-    'description' => 'Change the Auto SMS settings.',
+    'description' => 'Change Auto SMS settings.',
     'page callback' => 'drupal_get_form',
     'page arguments' => array('autosms_admin_settings'),
     'access arguments' => array('autosms perm'),
@@ -69,15 +70,15 @@ function autosms_cron() {
     $time_window = time() + $sh_day;
 
     if ($last_send + $sh_day < time()) {
-      watchdog('autosms', 'Starting the SMS sending process...');
+      watchdog('autosms', 'Starting SMS sending process...');
       if (autosms_send()) {
         variable_set('autosms_last_send', time());
-        watchdog('autosms', 'All SMS have been sent correctly');
+        watchdog('autosms', 'All SMS have been sent correctly.');
       }
     }
     else {
-      watchdog('autosms', 'SMS Sending was not started, because the time. The last sending was %last.
-      Auto sending is configured for start %count per day(s) at %time', array(
+      watchdog('autosms', 'SMS Sending was not started because of the time. The last sending was %last.
+      Auto sending is configured for starting %count times per day(s) at %time', array(
         '%last' => date("Y-m-d H:i", $last_send),
         '%count' => variable_get('autosms_shedule_count', array('1')),
         '%time' => $cron_time
@@ -85,33 +86,32 @@ function autosms_cron() {
     }
   }
   else {
-    watchdog('autosms', 'SMS sending was not started. Because the time.');
-    watchdog('autosms', 'SMS sending will be %need', array('%need' => date("Y-m-d H:i", $need_send)));
+    watchdog('autosms', 'SMS sending was not started because of the time.');
+    watchdog('autosms', 'SMS sending will be started at %need', array('%need' => date("Y-m-d H:i", $need_send)));
   }
 }
 
 /**
- * Main function
+ * SMS sending
  */
 function autosms_send() {
   /* Clear the tables */
-  $clean_result = db_delete('autosms_newsinglenodes')->execute();
-  $clean_result = db_delete('autosms_newnodes')->execute();
-  $clean_result = db_delete('autosms_tempsend')->execute();
+  db_delete('autosms_newsinglenodes')->execute();
+  db_delete('autosms_newnodes')->execute();
+  db_delete('autosms_tempsend')->execute();
 
-  /* Searching a new nodes, that were created last day from Auto SMS configuration time */
+  /* Searching for new nodes that were created last day from Auto SMS configuration time */
   $day_interval = 24 * 60 * 60 * variable_get('autosms_shedule_count', array('1'));
   $end_time = strtotime('today');
   $start_time = $end_time - $day_interval;
 
-  /* Calls the nodesearch function for nodes, that were created at the last day */
+  /* Calls the nodesearch function for nodes that were created last day */
   $node_array = autosms_nodesearch('nedvigimost', $start_time, $end_time);
   $types_str = array();
 
-
-  $break = 1;
+  $new_nodes_flag = false;
   foreach ($node_array as $row) {
-    $break = 0;
+    $new_nodes_flag = true;
     $types_op = autosms_optypes($row->nid);
     if ($types_op) {
       foreach ($types_op as $type) {
@@ -119,30 +119,23 @@ function autosms_send() {
       }
       $string = join(',', $types_str);
       unset($types_str);
-      $nids = db_insert('autosms_newsinglenodes')->fields(array(
+      db_insert('autosms_newsinglenodes')->fields(array(
         'nid' => $row->nid,
         'operation' => $string,
       ))->execute();
-
-      $string = '';
     }
   }
 
-  if ($break) {
+  if (! $new_nodes_flag) {
     return 'There were no new realty objects';
   }
 
-
-  /**
-   * Fills the autosms_newnodes table
-   */
+  //Fills the autosms_newnodes table
   $query = db_select('autosms_newsinglenodes', 'newsingle');
   $query
     ->fields('newsingle', array('nid', 'operation'))
     ->groupBy('newsingle.operation');
   $result = $query->execute();
-
-  $oper_str = array();
 
   $break = 1;
   foreach ($result as $row) {
@@ -157,25 +150,25 @@ function autosms_send() {
     if (!$str_result) {
       return FALSE;
     }
+
+    $nids_str = array();
     foreach ($str_result as $str_row) {
       $nids_str[] = $str_row->nid;
     }
 
     $string = join(',', $nids_str);
-    unset($nids_str);
-    $nids = db_insert('autosms_newnodes')->fields(array(
+
+    db_insert('autosms_newnodes')->fields(array(
       'nids' => $string,
       'operation' => $row->operation,
     ))->execute();
-    $string = '';
   }
+
   if ($break) {
     return FALSE;
   }
 
-  $output = '';
   if (autosms_users()) {
-    /* sending the SMSs*/
     autosms_sendmes();
   };
 
@@ -183,7 +176,7 @@ function autosms_send() {
 }
 
 /**
- * Search new nodes function for specific period time
+ * Searches for new nodes by specific period time
  */
 function autosms_nodesearch($nodetype, $starttime, $endtime) {
   $result = db_query('SELECT nid FROM {node} WHERE type = :type AND created BETWEEN :min_val AND :max_val',
@@ -198,7 +191,7 @@ function autosms_nodesearch($nodetype, $starttime, $endtime) {
 }
 
 /**
- * Determine the node type
+ * Determines node's type
  */
 function autosms_optypes($nid) {
   $result = db_query('SELECT field_tags_tid FROM {field_data_field_tags} WHERE entity_id = :entity_id',
@@ -206,14 +199,15 @@ function autosms_optypes($nid) {
       ':entity_id' => $nid,
     )
   );
+
   return $result;
 }
 
 /**
- * Check users for subscribers
+ * Checks users for subscribers
  */
 function autosms_users() {
-  /* Find the all SMS subscribers */
+  //Find all the SMS subscribers
   $result = db_query('SELECT entity_id FROM {field_data_field__sms} WHERE field__sms_value = :sms_val AND deleted = :del_st',
     array(
       ':sms_val' => 1,
@@ -221,37 +215,32 @@ function autosms_users() {
     )
   );
 
-  /**
-   * Search the nodes for subscribers, and if found, add this user to SMS sending list
-   */
+  //Search nodes for subscribers, and if found, add this user to the SMS sending list
   $break = 1;
   foreach ($result as $row) {
     $break = 0;
-    /* Determine what the client needs */
     $client_result = db_query('SELECT field_type_sms_tid FROM {field_data_field_type_sms} WHERE entity_id = :entity_id',
       array(
         ':entity_id' => $row->entity_id,
       )
     );
 
-    /* String with operation types that client needs */
     foreach ($client_result as $client_row) {
       $client_str[] = $client_row->field_type_sms_tid;
     }
-    $string = join(',', $client_str);
-    unset($client_str);
 
-    /* Search the nodes, that client needs (by operation type) */
+    $string = join(',', $client_str);
+
+    /* Search the nodes which need for a client (by operation type) */
     $nodes_to_send = db_query('SELECT nids FROM {autosms_newnodes} WHERE operation = :operation',
       array(
         ':operation' => $string,
       )
     );
 
-
-    /* Fills table for sending the SMS*/
+    /* Fill table for sending SMS*/
     foreach ($nodes_to_send as $row_mes) {
-      /* Get the client number (phone number) */
+      /* Get client's number (phone number) */
       $client_number = db_query("SELECT field_client_phone_value FROM {field_data_field_client_phone} WHERE entity_id = :entity_id",
         array(
           ':entity_id' => $row->entity_id,
@@ -260,7 +249,7 @@ function autosms_users() {
 
       $sign = variable_get('autosms_sender_name', 'ukrcity');
       if ($client_number) {
-        $messages = db_insert('autosms_tempsend')->fields(array(
+        db_insert('autosms_tempsend')->fields(array(
           'number' => $client_number,
           'sign' => $sign,
           'message' => $row_mes->nids,
@@ -268,9 +257,9 @@ function autosms_users() {
         ))->execute();
       }
     }
-    $string = '';
 
   }
+
   if ($break) {
     return FALSE;
   }
@@ -279,10 +268,10 @@ function autosms_users() {
 }
 
 /**
- * Push SMS to the GW
+ * Pushes SMS to the GW
  */
 function autosms_sendmes() {
-  /* Chech if there are a new SMSs */
+  /* Check if there is a new SMS */
   $query_messages = db_query('SELECT * FROM {autosms_tempsend}');
   $db_host = variable_get('autosms_gw_server', '');
   $db_user = variable_get('autosms_gw_login', '');
@@ -360,5 +349,6 @@ function autosms_stat() {
   }
   $output .= '</table>';
   mysql_close($db_server);
+
   return $output;
 }
