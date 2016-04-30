@@ -27,7 +27,7 @@ function autosms_admin_settings() {
     '#title' => t('SMS sending time'),
     '#options' => $options,
     '#default_value' => variable_get('autosms_cron_time', '00:00'),
-    '#description' => t('Select time when SMS wil be sending.'),
+    '#description' => t('Select a time when SMS will be sending.'),
   );
 
   $options_sh = array(
@@ -41,13 +41,13 @@ function autosms_admin_settings() {
     '#title' => t('Frequency of sending a SMS'),
     '#options' => $options_sh,
     '#default_value' => variable_get('autosms_shedule_count', array('1')),
-    '#description' => t('Specify how often do you want to send a SMS'),
+    '#description' => t('Specify how often do you want to send SMS'),
   );
 
   $form['autosms_sender_name'] = array(
     '#title' => t('Senders name'),
     '#type' => 'textfield',
-    '#description' => t('The senders name, that approved by the SMS Gateway'),
+    '#description' => t('Senders name that approved by the SMS Gateway'),
     '#default_value' => variable_get('autosms_sender_name', ''),
     '#size' => 20,
     '#weight' => -10,
@@ -104,7 +104,7 @@ function autosms_admin_settings() {
   $form['autosms_test_mode'] = array(
     '#title' => t('Testing mode'),
     '#type' => 'checkboxes',
-    '#description' => t('Check for enabling the testing mode (the time field will be ignored).'),
+    '#description' => t('Check for enabling a testing mode (the time field will be ignored).'),
     '#options' => $options,
     '#default_value' => variable_get('autosms_test_mode', ''),
     '#weight' => 25,
